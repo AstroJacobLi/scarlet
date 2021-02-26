@@ -227,7 +227,8 @@ class CompactExtendedSource(FactorizedComponent):
 
 class SingleExtendedSource(FactorizedComponent):
     def __init__(
-        self, model_frame, sky_coord, observations, thresh=1.0, shifting=False, min_grad=0
+        self, model_frame, sky_coord, observations, thresh=1.0, shifting=False, 
+        monotonic="flat", symmetric=True, min_grad=0
     ):
         """Extended source model
 
@@ -270,8 +271,8 @@ class SingleExtendedSource(FactorizedComponent):
             image,
             std,
             thresh=thresh,
-            symmetric=True,
-            monotonic="flat",
+            symmetric=symmetric,
+            monotonic=monotonic,
             min_grad=min_grad,
         )
 
@@ -401,7 +402,9 @@ class StarletSource(FactorizedComponent):
             Multiple of the backround RMS used as a
             flux cutoff for starlet threshold (usually between 5 and 3).
         """
-        source = ExtendedSource(model_frame, sky_coord, observations, thresh=thresh, min_grad=min_grad)
+        source = SingleExtendedSource(model_frame, sky_coord, observations, 
+                                      thresh=thresh, min_grad=min_grad, 
+                                      symmetric=False, monotonic='angle')
         source = StarletSource.from_source(source, starlet_thresh=starlet_thresh)
 
         if spectrum is not None:
