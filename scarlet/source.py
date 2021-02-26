@@ -227,7 +227,7 @@ class CompactExtendedSource(FactorizedComponent):
 
 class SingleExtendedSource(FactorizedComponent):
     def __init__(
-        self, model_frame, sky_coord, observations, thresh=1.0, shifting=False,
+        self, model_frame, sky_coord, observations, thresh=1.0, shifting=False, min_grad=0
     ):
         """Extended source model
 
@@ -272,7 +272,7 @@ class SingleExtendedSource(FactorizedComponent):
             thresh=thresh,
             symmetric=True,
             monotonic="flat",
-            min_grad=0,
+            min_grad=min_grad,
         )
 
         center = model_frame.get_pixel(sky_coord)
@@ -283,7 +283,7 @@ class SingleExtendedSource(FactorizedComponent):
             bbox=bbox,
             monotonic="angle",
             symmetric=False,
-            min_grad=0,
+            min_grad=min_grad,
             shifting=shifting,
         )
 
@@ -377,6 +377,7 @@ class StarletSource(FactorizedComponent):
         thresh=1.0,
         full=False,
         starlet_thresh=5e-3,
+        min_grad=0
     ):
         """Extended source intialized to match a set of observations
 
@@ -400,8 +401,8 @@ class StarletSource(FactorizedComponent):
             Multiple of the backround RMS used as a
             flux cutoff for starlet threshold (usually between 5 and 3).
         """
-        source = ExtendedSource(model_frame, sky_coord, observations, thresh=thresh)
-        source = StarletSource.from_source(source)
+        source = ExtendedSource(model_frame, sky_coord, observations, thresh=thresh, min_grad=min_grad)
+        source = StarletSource.from_source(source, starlet_thresh=starlet_thresh)
 
         if spectrum is not None:
             if isinstance(spectrum, Parameter):
@@ -589,6 +590,7 @@ def ExtendedSource(
     thresh=1.0,
     compact=False,
     shifting=False,
+    min_grad=0
 ):
     """Create extended sources with either a single component or multiple components.
 
@@ -602,7 +604,7 @@ def ExtendedSource(
         )
     if K == 1:
         return SingleExtendedSource(
-            model_frame, sky_coord, observations, thresh=thresh, shifting=shifting,
+            model_frame, sky_coord, observations, thresh=thresh, shifting=shifting, min_grad=min_grad
         )
     else:
         return MultiExtendedSource(

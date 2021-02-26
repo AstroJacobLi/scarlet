@@ -155,7 +155,7 @@ def _grad_match_shape(upstream_grad, model, data_frame, slices):
 
 defvjp(match_shape, _grad_match_shape)
 
-
+from functools import wraps
 class ConvolutionRenderer(Renderer):
     def __init__(self, data_frame, model_frame, convolution_type="fft", padding=10):
         """
@@ -190,6 +190,7 @@ class ConvolutionRenderer(Renderer):
         self.diff_kernel = fft.match_psf(psf_fft, model_psf_fft, padding=padding)
 
     def get_model(self, *parameters):
+        @wraps(self)
         def transform(model):
             # restrict to observed channels
             model_ = self.map_channels(model)
