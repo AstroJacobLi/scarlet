@@ -1,7 +1,6 @@
 import autograd.numpy as np
 from . import fft
 from .cache import Cache
-from scipy.stats import median_absolute_deviation as mad
 
 # Filter for the scarlet transform. Here bspline
 h = np.array([1.0 / 16, 1.0 / 4, 3.0 / 8, 1.0 / 4, 1.0 / 16])
@@ -341,5 +340,68 @@ def mad_wavelet(image):
     mad: array
         median absolute deviation for each image in the cube
     """
+    from scipy.stats import median_absolute_deviation as mad
     sigma = mad(Starlet(image, lvl=2).coefficients[:, 0, ...], axis=(-2, -1))
     return sigma
+
+
+def get_multiresolution_support(image, starlets, sigma, K=3, epsilon=1e-1, max_iter=20, image_type="ground"):
+    """Calculate the multi-resolution support for a dictionary of starlet coefficients
+
+    This is different for ground and space based telescopes.
+    For space-based telescopes the procedure in Starck and Murtagh 1998
+    iteratively calculates the multi-resolution support.
+    For ground based images, where the PSF is much wider and there are no
+    pixels with no signal at all scales, we use a modified method that
+    estimates support at each scale independently.
+
+    Parameters
+    ----------
+    image: 2D array
+        The image to transform into starlet coefficients.
+    starlets: array with dimension (scales+1, Ny, Nx)
+        The starlet dictionary used to reconstruct `image`.
+    sigma: float
+        The standard deviation of the `image`.
+    K: float
+        The multiple of `sigma` to use to calculate significance.
+        Coefficients `w` where `|w| > K*sigma_j`, where `sigma_j` is
+        standard deviation at the jth scale, are considered significant.
+    epsilon: float
+        The convergence criteria of the algorithm.
+        Once `|new_sigma_j - sigma_j|/new_sigma_j < epsilon` the
+        algorithm has completed.
+    max_iter: int
+        Maximum number of iterations to fit `sigma_j` at each scale.
+    image_type: str
+        The type of image that is being used.
+        This should be "ground" for ground based images with wide PSFs or
+        "space" for images from space-based telescopes with a narrow PSF.
+
+    Returns
+    -------
+    M: array of `int`
+        Mask with significant coefficients in `starlets` set to `True`.
+    """
+    assert image_type in ("ground", "space")
+
+    # Sigma to use for significance at each scale
+    # Initially we use the input `sigma`
+    sigma_j = np.ones((len(starlets),), dtype=image.dtype) * sigma
+    last_sigma_j = sigma_j
+    for it in range(max_iter):
+        M = (np.abs(starlets) > K * sigma_j[:, None, None])
+        # Take the standard deviation of the current insignificant coeffs at each scale
+        S = ~M
+        sigma_j = np.std(starlets * S.astype(int), axis=(1, 2))
+        # At lower scales all of the pixels may be significant,
+        # so sigma is effectively zero. To avoid infinities we
+        # only check the scales with non-zero sigma
+        cut = sigma_j > 0
+        if np.all(np.abs(sigma_j[cut] - last_sigma_j[cut]) / sigma_j[cut] < epsilon):
+            break
+
+        last_sigma_j = sigma_j
+        
+    return M.astype(int)
+
