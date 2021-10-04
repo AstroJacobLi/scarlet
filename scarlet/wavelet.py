@@ -431,3 +431,22 @@ def apply_wavelet_denoising(image, sigma=None, k=3, epsilon=1e-1, max_iter=20, i
         if positive:
             x[x<0] = 0
     return x
+
+def mad_wavelet(image):
+    """ image: Median absolute deviation of the first wavelet scale.
+    (WARNING: sorry to disapoint, this is not a wavelet for mad scientists)
+    Parameters
+    ----------
+    image: array
+        An image or cube of images
+    Returns
+    -------
+    mad: array
+        median absolute deviation for each image in the cube
+    """
+    from scipy.stats import median_absolute_deviation as mad
+    if len(image.shape) > 2:
+        sigma = [mad(Starlet.from_image(img, scales=2).coefficients[0, ...], axis=(-2, -1)) for img in image]
+    else:
+        sigma = mad(Starlet.from_image(image, scales=2).coefficients[0, ...], axis=(-2, -1))
+    return sigma
