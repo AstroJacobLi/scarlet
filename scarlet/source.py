@@ -227,7 +227,8 @@ class CompactExtendedSource(FactorizedComponent):
 
 class SingleExtendedSource(FactorizedComponent):
     def __init__(
-        self, model_frame, sky_coord, observations, thresh=1.0, shifting=False, 
+        self, model_frame, sky_coord, observations,
+        star_mask=None, satu_mask=None, thresh=1.0, shifting=False,
         monotonic="flat", symmetric=True, min_grad=0
     ):
         """Extended source model
@@ -254,6 +255,7 @@ class SingleExtendedSource(FactorizedComponent):
         shifting: `bool`
             Whether or not a subpixel shift is added as optimization parameter
         """
+        import copy
         if not hasattr(observations, "__iter__"):
             observations = (observations,)
 
@@ -264,6 +266,10 @@ class SingleExtendedSource(FactorizedComponent):
         # initialize morphology
         # compute optimal SNR coadd for detection
         image, std = init.build_initialization_image(observations, spectra=spectra)
+        # In fact, saturated pixels have nothing to do with morphology estimation
+        # if star_mask is not None:
+        #     image[star_mask] = np.nan  # not nan, but inf
+
         # make monotonic morphology, trimmed to box with pixels above std
         morph, bbox = self.init_morph(
             sky_coord,
@@ -276,24 +282,55 @@ class SingleExtendedSource(FactorizedComponent):
             min_grad=min_grad,
         )
 
+        morph_masked1 = copy.copy(morph)
+        if star_mask is not None:
+            box_3D = Box((model_frame.C,)) @ bbox
+            boxed_mask = box_3D.extract_from(np.repeat(star_mask[np.newaxis, :], bbox.shape[0], axis=0))
+            morph_masked1[np.sum(boxed_mask, axis=0).astype(bool)] = 0.0
+
         center = model_frame.get_pixel(sky_coord)
         morphology = ExtendedSourceMorphology(
             model_frame,
             center,
-            morph,
+            morph_masked1,
             bbox=bbox,
             monotonic="angle",
             symmetric=False,
             min_grad=min_grad,
             shifting=shifting,
         )
-
         # find best-fit spectra for morph from init coadd
         # assumes img only has that source in region of the box
-        detect_all, std_all = init.build_initialization_image(observations)
+        detect_all, std_all = copy.deepcopy(init.build_initialization_image(observations))
         box_3D = Box((model_frame.C,)) @ bbox
         boxed_detect = box_3D.extract_from(detect_all)
-        spectrum = init.get_best_fit_spectrum((morph,), boxed_detect)
+        morph_masked2 = copy.copy(morph)
+
+        if satu_mask is not None or star_mask is not None:
+            if satu_mask is not None and star_mask is not None:
+                boxed_mask = box_3D.extract_from((satu_mask + star_mask).astype(bool))
+            elif satu_mask is not None:
+                boxed_mask = box_3D.extract_from(satu_mask.astype(bool))
+            elif star_mask is not None:
+                boxed_mask = boxed_mask #  use the boxed_mask in above
+                
+            boxed_mask = np.sum(boxed_mask, axis=0).astype(bool)
+            for img in boxed_detect:
+                img[boxed_mask.astype(bool)] = 0
+            morph_masked2[boxed_mask.astype(bool)] = 0
+
+        # Sometimes (especially for images with coadd issues, i.e., large "interpolation" pixels in HSC mask),
+        # the spectrum will be NaN after masking "saturation" and "interpolation" pixels.
+        # If this happens, we don't use mask anymore when estimating the spectrum.
+
+        spectrum = init.get_best_fit_spectrum((morph_masked2,), boxed_detect)
+
+        if np.sum(np.isnan(spectrum)) > 0:
+            spectrum = init.get_best_fit_spectrum((morph_masked1,), boxed_detect)
+
+        if np.sum(np.isnan(spectrum)) > 0:
+            spectrum = init.get_best_fit_spectrum((morph,), boxed_detect)
+
         noise_rms = np.concatenate(
             [np.array(np.mean(obs.noise_rms, axis=(1, 2))) for obs in observations]
         ).reshape(-1)
@@ -377,6 +414,8 @@ class StarletSource(FactorizedComponent):
         spectrum=None,
         thresh=1.0,
         full=False,
+        star_mask=None,
+        satu_mask=None,
         starlet_thresh=5e-3,
         min_grad=0
     ):
@@ -402,8 +441,9 @@ class StarletSource(FactorizedComponent):
             Multiple of the backround RMS used as a
             flux cutoff for starlet threshold (usually between 5 and 3).
         """
-        source = SingleExtendedSource(model_frame, sky_coord, observations, 
-                                      thresh=thresh, min_grad=min_grad, 
+        source = SingleExtendedSource(model_frame, sky_coord, observations,
+                                      star_mask=star_mask, satu_mask=satu_mask,
+                                      thresh=thresh, min_grad=min_grad,
                                       symmetric=False, monotonic='angle')
         source = StarletSource.from_source(source, starlet_thresh=starlet_thresh)
 
@@ -461,6 +501,7 @@ class MultiExtendedSource(CombinedComponent):
         model_frame,
         sky_coord,
         observations,
+        satu_mask=None,
         K=2,
         flux_percentiles=None,
         thresh=1.0,
@@ -500,7 +541,7 @@ class MultiExtendedSource(CombinedComponent):
             observations = (observations,)
 
         # start off with regular ExtendedSource
-        source = ExtendedSource(model_frame, sky_coord, observations, thresh=thresh)
+        source = ExtendedSource(model_frame, sky_coord, observations, satu_mask=satu_mask, thresh=thresh)
         _, morphology = source.children
         morphs, boxes = self.init_morphs(morphology, flux_percentiles)
 
@@ -588,6 +629,7 @@ def ExtendedSource(
     model_frame,
     sky_coord,
     observations,
+    satu_mask=None,
     K=1,
     flux_percentiles=None,
     thresh=1.0,
@@ -607,13 +649,15 @@ def ExtendedSource(
         )
     if K == 1:
         return SingleExtendedSource(
-            model_frame, sky_coord, observations, thresh=thresh, shifting=shifting, min_grad=min_grad
+            model_frame, sky_coord, observations, satu_mask=satu_mask,
+            thresh=thresh, shifting=shifting, min_grad=min_grad
         )
     else:
         return MultiExtendedSource(
             model_frame,
             sky_coord,
             observations,
+            satu_mask=satu_mask,
             K=K,
             flux_percentiles=flux_percentiles,
             thresh=thresh,
