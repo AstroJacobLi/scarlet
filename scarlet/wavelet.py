@@ -484,5 +484,5 @@ def mad_wavelet(image):
         median absolute deviation for each image in the cube
     """
     from scipy.stats import median_absolute_deviation as mad
-    sigma = mad(Starlet(image, lvl=2).coefficients[:, 0, ...], axis=(-2, -1))
+    sigma = mad(Starlet.from_image(image).coefficients[0, ...], axis=(-2, -1))
     return sigma

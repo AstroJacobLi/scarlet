@@ -258,7 +258,7 @@ class SingleExtendedSource(FactorizedComponent):
         self, model_frame, sky_coord, observations,
         star_mask=None, satu_mask=None, thresh=1.0, shifting=False,
         resizing=True, boxsize=None,
-        monotonic="flat", symmetric=True, min_grad=0
+        monotonic="flat", symmetric=False, min_grad=0
     ):
         """Extended source model
 
@@ -502,7 +502,7 @@ class StarletSource(FactorizedComponent):
                 model_frame, sky_coord, observations,
                 star_mask=star_mask, satu_mask=satu_mask,
                 thresh=thresh, min_grad=min_grad,
-                boxsize=boxsize, symmetric=False  # , monotonic='angle'
+                boxsize=boxsize
             )
         source = StarletSource.from_source(
             source, monotonic=monotonic, starlet_thresh=starlet_thresh
@@ -752,5 +752,5 @@ def ExtendedSource(
             thresh=thresh,
             shifting=shifting,
             resizing=resizing,
-            boxsize=boxsize,
+            boxsize=boxsize
         )
