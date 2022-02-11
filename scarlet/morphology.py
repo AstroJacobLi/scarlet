@@ -7,6 +7,7 @@ from .constraint import (
     ConstraintChain,
     L0Constraint,
     PositivityConstraint,
+    PositivityScalesConstraint,
     MonotonicityConstraint,
     MonotonicMaskConstraint,
     SymmetryConstraint,
@@ -53,10 +54,10 @@ class Morphology(Model):
         size = max(image.shape)
         dist = 0
         while (
-            np.all(image[dist, :] <= thresh)
-            and np.all(image[-dist - 1, :] <= thresh)
-            and np.all(image[:, dist] <= thresh)
-            and np.all(image[:, -dist - 1] <= thresh)
+            np.all(image[dist, :] <= thresh) and
+            np.all(image[-dist - 1, :] <= thresh) and
+            np.all(image[:, dist] <= thresh) and
+            np.all(image[:, -dist - 1] <= thresh)
         ):
             dist += 1
         newsize = initialization.get_minimal_boxsize(size - 2 * dist)
@@ -265,7 +266,8 @@ class StarletMorphology(Morphology):
         Lower bound on threshold for all but the last starlet scale
     """
 
-    def __init__(self, frame, image, bbox=None, monotonic=False, threshold=0):
+    def __init__(self, frame, image, bbox=None, monotonic=False,
+                 threshold=0, variance=0.05, scales=4):
 
         if bbox is None:
             assert frame.bbox[1:].shape == image.shape
@@ -278,20 +280,29 @@ class StarletMorphology(Morphology):
         # The starlet transform is the model
         coeffs = self.transform.coefficients
 
+        # wavelet-scale norm
+        starlet_norm = self.transform.norm
+        # One threshold per wavelet scale: thresh*norm
+        thresh_array = np.zeros(coeffs.shape) + threshold
+        thresh_array *= starlet_norm[:, None, None]
+        # We don't threshold the last scale
+        thresh_array[-1] = 0
+
         if not self.monotonic:
-            # wavelet-scale norm
-            starlet_norm = self.transform.norm
-            # One threshold per wavelet scale: thresh*norm
-            thresh_array = np.zeros(coeffs.shape) + threshold
-            thresh_array *= starlet_norm[:, None, None]
-            # We don't threshold the last scale
-            thresh_array[-1] = 0
             constraint = ConstraintChain(
                 PositivityConstraint(0), L0Constraint(thresh_array)
             )
         else:
+            # We only apply positive and monotonic constraints to scale 1&2
+            # Then we apply the old wavelet constrains on other scales.
+            thresh_array[scales[-1]:] = 0  # old wavelet constraints don't apply to scale 1&2
             center = tuple(s // 2 for s in bbox.shape)
-            constraint = MonotonicMaskConstraint(center, center_radius=1)
+            constraint = ConstraintChain(
+                MonotonicMaskConstraint(center, variance=variance, scales=scales, center_radius=1),
+                # PositivityScalesConstraint(0, scales),
+                # PositivityScalesConstraint(0, range(scales[-1], self.transform.scales)),
+                L0Constraint(thresh_array)
+            )
 
         coeffs = Parameter(coeffs, name="coeffs", step=1e-2, constraint=constraint)
         super().__init__(frame, coeffs, bbox=bbox)
