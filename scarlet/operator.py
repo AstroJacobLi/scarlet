@@ -129,7 +129,7 @@ def get_center(image, center, radius=1):
     return center[0]+y0, center[1]+x0
 
 
-def prox_monotonic_mask(X, step, center, center_radius=1, variance=0.0, max_iter=3):
+def prox_monotonic_mask(X, step, center, center_radius=1, variance=0.0, zero=0.0, max_iter=3):
     """Apply monotonicity from any path from the center
 
     Parameters
@@ -157,14 +157,14 @@ def prox_monotonic_mask(X, step, center, center_radius=1, variance=0.0, max_iter
     if center_radius > 0:
         i, j = get_center(X, center, center_radius)
     else:
-        i,j = int(np.round(center[0])), int(np.round(center[1]))
+        i, j = int(np.round(center[0])), int(np.round(center[1]))
     unchecked = np.ones(X.shape, dtype=bool)
     unchecked[i, j] = False
     orphans = np.zeros(X.shape, dtype=bool)
     # This is the bounding box of the result
     bounds = np.array([i, i, j, j], dtype=np.int32)
     # Get all of the monotonic pixels
-    get_valid_monotonic_pixels(i, j, X, unchecked, orphans, variance, bounds, 0)
+    get_valid_monotonic_pixels(i, j, X, unchecked, orphans, variance, bounds, zero)
     # Set the initial model to the exact input in the valid pixels
     model = X.copy()
 
