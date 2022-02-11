@@ -179,7 +179,7 @@ class CompactExtendedSource(FactorizedComponent):
             center,
             morph,
             bbox=bbox,
-            monotonic="angle",
+            monotonic="flat",
             symmetric=False,
             min_grad=0,
             shifting=shifting,
@@ -328,7 +328,7 @@ class SingleExtendedSource(FactorizedComponent):
             center,
             morph_masked1,
             bbox=bbox,
-            monotonic="angle",
+            monotonic="flat",
             symmetric=False,
             min_grad=min_grad,
             shifting=shifting,
@@ -414,7 +414,7 @@ class SingleExtendedSource(FactorizedComponent):
             )
         if monotonic:
             if monotonic is True:
-                monotonic = "angle"
+                monotonic = "flat"  # "angle"
             # use finite thresh to remove flat bridges
             prox_monotonic = operator.prox_weighted_monotonic(
                 im.shape,
@@ -469,7 +469,9 @@ class StarletSource(FactorizedComponent):
         starlet_thresh=5e-3,
         boxsize=None,
         monotonic=False,
-        min_grad=0
+        min_grad=0,
+        variance=0.0,
+        scales=[0, 1, 2, 3],
     ):
         """Extended source intialized to match a set of observations
 
@@ -505,7 +507,8 @@ class StarletSource(FactorizedComponent):
                 boxsize=boxsize
             )
         source = StarletSource.from_source(
-            source, monotonic=monotonic, starlet_thresh=starlet_thresh
+            source, monotonic=monotonic, starlet_thresh=starlet_thresh,
+            variance=variance, scales=scales
         )
 
         if spectrum is not None:
@@ -526,7 +529,7 @@ class StarletSource(FactorizedComponent):
         super().__init__(source.frame, *source.children)
 
     @classmethod
-    def from_source(cls, source, monotonic=False, starlet_thresh=5e-3):
+    def from_source(cls, source, monotonic=False, starlet_thresh=5e-3, variance=0.0, scales=4):
         assert isinstance(source, FactorizedComponent)
 
         frame = source.frame
@@ -536,7 +539,8 @@ class StarletSource(FactorizedComponent):
 
         # transform to starlets
         morphology = StarletMorphology(
-            frame, morph, bbox=bbox, monotonic=monotonic, threshold=starlet_thresh
+            frame, morph, bbox=bbox, monotonic=monotonic,
+            threshold=starlet_thresh, variance=variance, scales=scales
         )
 
         # this trick gets us the proper class while call init on the base class
@@ -640,7 +644,7 @@ class MultiExtendedSource(CombinedComponent):
                 center,
                 morphs[k],
                 bbox=boxes[k],
-                monotonic="angle",
+                monotonic="flat",
                 symmetric=False,
                 min_grad=0,
                 shifting=shifting,
