@@ -1,4 +1,5 @@
 from functools import partial
+from re import S
 
 import numpy as np
 import proxmin
@@ -89,6 +90,19 @@ class PositivityConstraint(Constraint):
 
     def __call__(self, X, step):
         X = np.maximum(X, self.zero)
+        return X
+
+
+class PositivityScalesConstraint(Constraint):
+    """Allow only values not smaller than `zero`.
+    """
+
+    def __init__(self, zero=0, scales=[0, 1, 2]):
+        self.zero = zero
+        self.scales = scales
+
+    def __call__(self, X, step):
+        X = np.array([np.maximum(X[i], self.zero) if i in self.scales else X[i] for i in range(len(X))])
         return X
 
 
@@ -238,11 +252,12 @@ class MonotonicMaskConstraint(Constraint):
     """Make morphology monotonic by branching from the center
     """
 
-    def __init__(self, center, center_radius=1, variance=0.0, max_iter=3):
+    def __init__(self, center, center_radius=1, variance=0.0, scales=[0, 1, 2], max_iter=3):
         self.center = center
         self.center_radius = center_radius
         self.variance = variance
         self.max_iter = max_iter
+        self.scales = scales
         self.prox = partial(
             operator.prox_monotonic_mask,
             center=center,
@@ -255,7 +270,12 @@ class MonotonicMaskConstraint(Constraint):
         if len(morph.shape) == 2:
             valid, morph, bounds = self.prox(morph, step)
         else:
-            morph = np.array([self.prox(morph_, step)[1] for morph_ in morph])
+            # Here we only pose (positive) monotonicity constraints on the first and second scale of starlet.
+            morph = np.array([self.prox(morph[i], step, zero=0)[1] if i in self.scales else self.prox(morph[i], step, zero=-999.)[1]
+                              for i in range(len(morph))])
+            # morph = np.array([self.prox(morph[i], step, zero=0)[1] if i in self.scales else morph[i]
+            #                   for i in range(len(morph))])
+            # morph = np.array([self.prox(morph_, step)[1] for morph_ in morph])
         return morph
 
 
