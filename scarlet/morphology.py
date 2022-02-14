@@ -295,12 +295,10 @@ class StarletMorphology(Morphology):
         else:
             # We only apply positive and monotonic constraints to scale 1&2
             # Then we apply the old wavelet constrains on other scales.
-            thresh_array[scales[-1]:] = 0  # old wavelet constraints don't apply to scale 1&2
+            thresh_array[scales[-1]:] = 0  # no threshold on large scales
             center = tuple(s // 2 for s in bbox.shape)
             constraint = ConstraintChain(
                 MonotonicMaskConstraint(center, variance=variance, scales=scales, center_radius=1),
-                # PositivityScalesConstraint(0, scales),
-                # PositivityScalesConstraint(0, range(scales[-1], self.transform.scales)),
                 L0Constraint(thresh_array)
             )
 
