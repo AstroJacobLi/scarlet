@@ -267,13 +267,15 @@ class StarletMorphology(Morphology):
     """
 
     def __init__(self, frame, image, bbox=None, monotonic=False,
-                 threshold=0, variance=0.05, scales=4):
+                 threshold=0, variance=0.05, scales=[0, 1, 2, 3, 4]):
 
         if bbox is None:
             assert frame.bbox[1:].shape == image.shape
             bbox = Box(image.shape)
 
         self.monotonic = monotonic
+        self.variance = variance
+        self.scales = scales
 
         # Starlet transform of morphologies (n1,n2) with 3 dimensions: (scales+1,n1,n2)
         self.transform = Starlet.from_image(image)
