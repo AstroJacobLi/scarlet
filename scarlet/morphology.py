@@ -276,6 +276,7 @@ class StarletMorphology(Morphology):
         self.monotonic = monotonic
         self.variance = variance
         self.scales = scales
+        self.thresh = threshold
 
         # Starlet transform of morphologies (n1,n2) with 3 dimensions: (scales+1,n1,n2)
         self.transform = Starlet.from_image(image)
@@ -285,7 +286,7 @@ class StarletMorphology(Morphology):
         # wavelet-scale norm
         starlet_norm = self.transform.norm
         # One threshold per wavelet scale: thresh*norm
-        thresh_array = np.zeros(coeffs.shape) + threshold
+        thresh_array = np.zeros(coeffs.shape) + self.thresh
         thresh_array *= starlet_norm[:, None, None]
         # We don't threshold the last scale
         thresh_array[-1] = 0
@@ -297,10 +298,10 @@ class StarletMorphology(Morphology):
         else:
             # We only apply positive and monotonic constraints to scale 1&2
             # Then we apply the old wavelet constrains on other scales.
-            thresh_array[scales[-1]:] = 0  # no threshold on large scales
+            thresh_array[self.scales[-1]:] = 0  # no threshold on large scales
             center = tuple(s // 2 for s in bbox.shape)
             constraint = ConstraintChain(
-                MonotonicMaskConstraint(center, variance=variance, scales=scales, center_radius=1),
+                MonotonicMaskConstraint(center, variance=self.variance, scales=self.scales, center_radius=1),
                 L0Constraint(thresh_array)
             )
 
@@ -324,9 +325,23 @@ class StarletMorphology(Morphology):
         if bbox != self.bbox:
             slice, _ = overlapped_slices(bbox, self.bbox)
             center = tuple(s // 2 for s in self.bbox.shape)
+            coeffs = self.transform.coefficients
+            # wavelet-scale norm
+            starlet_norm = self.transform.norm
+            # One threshold per wavelet scale: thresh*norm
+            thresh_array = np.zeros(coeffs.shape) + self.thresh
+            thresh_array *= starlet_norm[:, None, None]
+            # We don't threshold the last scale
+            thresh_array[-1] = 0
             if self.monotonic:
                 # non-monotonic can keep its constraint as it's independent of size
-                constraint = MonotonicMaskConstraint(center, center_radius=1)
+                thresh_array[self.scales[-1]:] = 0  # no threshold on large scales
+                constraint = ConstraintChain(
+                    MonotonicMaskConstraint(center, variance=self.variance,
+                                            scales=self.scales, center_radius=1),
+                    L0Constraint(thresh_array)
+                )
+                # constraint = MonotonicMaskConstraint(center, center_radius=1)
             coeffs = Parameter(
                 coeffs[:, slice[0], slice[1]],
                 name=coeffs.name,
