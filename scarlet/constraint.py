@@ -272,8 +272,12 @@ class MonotonicMaskConstraint(Constraint):
         else:
             # We require monotoniticy for all scales, but only require positivity for high-freq scales
             morph = np.array([self.prox(morph[i], step, zero=0.0)[1]
-                             if i in self.scales else self.prox(morph[i], step, zero=-1.)[1]
+                             if i in self.scales else self.prox(morph[i], step, zero=-99.)[1]
                               for i in range(len(morph))])
+            # We require monotoniticy&positivity for small scales, but only require positivity for high-freq scales
+            # morph = np.array([self.prox(morph[i], step, zero=0)[1]
+            #                  if i in self.scales else np.maximum(morph[i], 0)
+            #                   for i in range(len(morph))])
             # morph = np.array([self.prox(morph[i], step, zero=0.0)[1]
             #                  if i in self.scales else np.maximum(morph[i], 0.0) for i in range(len(morph))])
             # morph = np.array([self.prox(morph_, step)[1] for morph_ in morph])

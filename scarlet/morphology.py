@@ -89,14 +89,14 @@ class ImageMorphology(Morphology):
     """
 
     def __init__(
-        self, frame, image, bbox=None, shifting=False, shift=None, resizing=True
+        self, frame, image, bbox=None, shifting=False, shift=None, resizing=True, fixed=False
     ):
         if isinstance(image, Parameter):
             assert image.name == "image"
         else:
             constraint = PositivityConstraint()
             image = Parameter(
-                image, name="image", step=relative_step, constraint=constraint
+                image, name="image", step=relative_step, constraint=constraint, fixed=fixed,
             )
 
         if bbox is None:

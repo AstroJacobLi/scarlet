@@ -81,8 +81,42 @@ class RandomSource(FactorizedComponent):
         if observations is None:
             spectrum = np.random.rand(C)
         else:
-            spectrum = init.get_best_fit_spectrum(image[None], observations)[0]
+            spectrum = init.get_best_fit_spectrum(image[None], observations.data)
+        # default is step=1e-2, using larger steps here becaus SED is probably uncertain
+        spectrum = Parameter(
+            spectrum,
+            name="spectrum",
+            step=partial(relative_step, factor=1e-1),
+            constraint=PositivityConstraint(),
+        )
+        spectrum = TabulatedSpectrum(model_frame, spectrum)
 
+        super().__init__(model_frame, spectrum, morphology)
+
+
+class ConstSkySource(FactorizedComponent):
+    """Sources with uniform fixed morphology and sed.
+    """
+
+    def __init__(self, model_frame, observations=None):
+        """Source intialized as random field.
+
+        Parameters
+        ----------
+        model_frame: `~scarlet.Frame`
+            The frame of the model
+        observations: instance or list of `~scarlet.Observation`
+            Observation to initialize the SED of the source
+        """
+        C, Ny, Nx = model_frame.bbox.shape
+        # image = np.random.rand(Ny, Nx)
+        image = np.ones((Ny, Nx))
+        morphology = ImageMorphology(model_frame, image, fixed=True)
+
+        if observations is None:
+            spectrum = np.random.rand(C)
+        else:
+            spectrum = init.get_best_fit_spectrum(image[None], observations.data) * 1e-20
         # default is step=1e-2, using larger steps here becaus SED is probably uncertain
         spectrum = Parameter(
             spectrum,
