@@ -28,6 +28,8 @@ from .psf import PSF, ImagePSF, FunctionPSF, GaussianPSF, MoffatPSF
 from .source import (
     NullSource,
     RandomSource,
+    ConstSkySource,
+    ConstWholeSkySource,
     PointSource,
     CompactExtendedSource,
     SingleExtendedSource,

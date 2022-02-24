@@ -94,7 +94,7 @@ class RandomSource(FactorizedComponent):
         super().__init__(model_frame, spectrum, morphology)
 
 
-class ConstSkySource(FactorizedComponent):
+class ConstWholeSkySource(FactorizedComponent):
     """Sources with uniform fixed morphology and sed.
     """
 
@@ -109,7 +109,6 @@ class ConstSkySource(FactorizedComponent):
             Observation to initialize the SED of the source
         """
         C, Ny, Nx = model_frame.bbox.shape
-        # image = np.random.rand(Ny, Nx)
         image = np.ones((Ny, Nx))
         morphology = ImageMorphology(model_frame, image, fixed=True)
 
@@ -125,7 +124,47 @@ class ConstSkySource(FactorizedComponent):
             constraint=PositivityConstraint(),
         )
         spectrum = TabulatedSpectrum(model_frame, spectrum)
+        self.center = (Ny//2, Nx//2)
+        super().__init__(model_frame, spectrum, morphology)
 
+
+class ConstSkySource(FactorizedComponent):
+    """Sources with uniform fixed morphology and sed.
+    """
+
+    def __init__(self, model_frame, bbox=None, observations=None):
+        """Source intialized as random field.
+
+        Parameters
+        ----------
+        model_frame: `~scarlet.Frame`
+            The frame of the model
+        observations: instance or list of `~scarlet.Observation`
+            Observation to initialize the SED of the source
+        """
+        C, Ny, Nx = model_frame.bbox.shape
+        image_large = np.ones((Ny, Nx))
+        # image = np.random.rand(Ny, Nx)
+        # C, Ny, Nx = bbox.shape
+        C, Ny, Nx = bbox.shape
+        image = np.ones((Ny, Nx))
+        _bbox = Box(bbox.shape[1:], bbox.origin[1:])
+
+        morphology = ImageMorphology(model_frame, image, bbox=_bbox, fixed=True)
+
+        if observations is None:
+            spectrum = np.random.rand(C)
+        else:
+            spectrum = init.get_best_fit_spectrum(image_large[None], observations.data) * 1e-20
+        # default is step=1e-2, using larger steps here becaus SED is probably uncertain
+        spectrum = Parameter(
+            spectrum,
+            name="spectrum",
+            step=partial(relative_step, factor=1e-1),
+            constraint=PositivityConstraint(),
+        )
+        spectrum = TabulatedSpectrum(model_frame, spectrum)
+        self.center = (Ny//2, Nx//2)
         super().__init__(model_frame, spectrum, morphology)
 
 
