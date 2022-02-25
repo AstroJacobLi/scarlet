@@ -21,6 +21,8 @@ from .psf import PSF
 from .wavelet import Starlet, starlet_reconstruction, get_multiresolution_support
 from . import fft
 from . import initialization
+from . import profile
+import galsim
 
 
 class Morphology(Model):
@@ -444,3 +446,74 @@ class ExtendedSourceMorphology(ImageMorphology):
             return self.pixel_center + self.shift
         else:
             return self.pixel_center
+
+
+class SpergelMorphology(Morphology):
+    """Morphology from a Spergel profile.
+
+    Start with a round Spergel profile.
+    We don't care about flux because it is taken into account by SED.
+
+    Parameters
+    ----------
+    frame: `~scarlet.Frame`
+        Characterization of the model
+    center: array or `~scarlet.Parameter`
+        2D center parameter (in units of frame pixels)
+    """
+
+    def __init__(self,
+                 frame,
+                 center,
+                 nu,
+                 rhalf,
+                 g1,
+                 g2,
+                 bbox=None,
+                 shifting=False):
+        """
+        Spergel Morphology
+
+        Parameters
+        ----------
+        nu, rhalf, g1, g2 are initial guesses for the Spergel parameters.
+        """
+
+        # Center of the Spergel profile
+        self.pixel_center = np.round(center).astype("int")
+
+        # define bbox
+        if bbox is None:
+            bbox = frame.bbox  # default to full frame
+        else:
+            assert len(bbox.shape) == len(frame.bbox.shape)
+
+        # parameters is simply 2D center (i.e., the shift from pixel_center)
+        if shifting:
+            shift = Parameter(center - self.pixel_center, name="shift", step=1e-2)
+        else:
+            shift = Parameter(np.zeros(2), name="shift", step=1e-2, fixed=True)
+
+        self.shift = shift
+
+        # Spergel parameters
+        david = Parameter(np.array([nu, rhalf, g1, g2], dtype=np.float), name="david", step=1e-2)
+        parameters = (david, shift)
+        super().__init__(frame, *parameters, bbox=bbox)
+
+    def center(self):
+        if self.shift is not None:
+            return self.pixel_center + self.shift
+        else:
+            return self.pixel_center
+
+    def get_model(self, *parameters):
+        david = self.get_parameter(0, *parameters)  # Spergel parameters
+        shift = self.get_parameter(1, *parameters)
+        nu, rhalf, g1, g2 = david
+        # In galsim, rhalf is always in arcsec. We need to convert to pixels
+        gal = galsim.Spergel(nu._value, rhalf._value).shear(g1=g1._value, g2=g2._value)
+        return gal.drawImage(method='fft', scale=1.0,
+                             nx=self.bbox.shape[2],
+                             ny=self.bbox.shape[1],
+                             offset=shift._value).array
