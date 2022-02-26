@@ -198,7 +198,7 @@ class SpergelProfile(FunctionProfile):
             np.array([[1 + g1, g2],
                       [g2, 1 - g1]]) / np.sqrt(1 - g**2))
 
-        x, y = np.meshgrid(self._X - offset[1], self._Y - offset[0])
+        x, y = np.meshgrid(self._X - offset[0], self._Y - offset[1])
         x_ = shear_matrix[0, 0] * x + shear_matrix[0, 1] * y
         y_ = shear_matrix[1, 0] * x + shear_matrix[1, 1] * y
         z = np.sqrt((x_ / rhalf) ** 2 + (y_ / rhalf) ** 2)
