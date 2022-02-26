@@ -851,7 +851,6 @@ class SpergelSource(FactorizedComponent):
         # the spectrum will be NaN after masking "saturation" and "interpolation" pixels.
         # If this happens, we don't use mask anymore when estimating the spectrum.
         spectrum = init.get_best_fit_spectrum((morph_masked2,), boxed_detect)
-
         if np.sum(np.isnan(spectrum)) > 0:
             spectrum = init.get_best_fit_spectrum((morph,), boxed_detect)
 

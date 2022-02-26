@@ -1,6 +1,7 @@
 import autograd.numpy as np
 import numpy.ma as ma
 import proxmin.operators
+from functools import partial
 
 from .bbox import Box, overlapped_slices
 from .constraint import (
@@ -497,8 +498,16 @@ class SpergelMorphology(Morphology):
         self.shift = shift
 
         # Spergel parameters
-        david = Parameter(np.array([nu, rhalf, g1, g2], dtype=np.float), name="david", step=1e-2)
+        david = Parameter(np.array([nu, rhalf, g1, g2], dtype=np.float32), name="david", step=1e-2)
+        # steps of 1% of mean amplitude, minimum set by noise_rms
+        step = partial(relative_step, factor=1e-2, minimum=np.array([1e-2, 1e-2, 1e-2, 1e-2]))
+        david = Parameter(
+            david, name="david", step=step, constraint=None,  # =PositivityConstraint(zero=1e-20)
+        )
         parameters = (david, shift)
+
+        self.profile = profile.SpergelProfile(david, boxsize=bbox.shape[1])
+
         super().__init__(frame, *parameters, bbox=bbox)
 
     def center(self):
@@ -510,10 +519,12 @@ class SpergelMorphology(Morphology):
     def get_model(self, *parameters):
         david = self.get_parameter(0, *parameters)  # Spergel parameters
         shift = self.get_parameter(1, *parameters)
-        nu, rhalf, g1, g2 = david
+        return self.profile.get_model(offset=shift)
+
+        # nu, rhalf, g1, g2 = david
         # In galsim, rhalf is always in arcsec. We need to convert to pixels
-        gal = galsim.Spergel(nu._value, rhalf._value).shear(g1=g1._value, g2=g2._value)
-        return gal.drawImage(method='fft', scale=1.0,
-                             nx=self.bbox.shape[2],
-                             ny=self.bbox.shape[1],
-                             offset=shift._value).array
+        # gal = galsim.Spergel(nu._value, rhalf._value).shear(g1=g1._value, g2=g2._value)
+        # return gal.drawImage(method='fft', scale=1.0,
+        #                      nx=self.bbox.shape[2],
+        #                      ny=self.bbox.shape[1],
+        #                      offset=shift._value).array
