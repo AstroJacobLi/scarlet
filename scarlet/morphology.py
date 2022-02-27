@@ -491,24 +491,44 @@ class SpergelMorphology(Morphology):
 
         # parameters is simply 2D center (i.e., the shift from pixel_center)
         if shifting:
-            shift = Parameter(center - self.pixel_center, name="shift", step=1e-2)
+            self.shift = Parameter(center - self.pixel_center, name="shift", step=1e-2)
         else:
-            shift = Parameter(np.zeros(2), name="shift", step=1e-2, fixed=True)
-
-        self.shift = shift
+            self.shift = Parameter(np.zeros(2) + 0.01, name="shift", step=1e-2, fixed=True)
 
         # Spergel parameters
-        david = Parameter(np.array([nu, rhalf, g1, g2], dtype=np.float32), name="david", step=1e-2)
+        if isinstance(nu, Parameter):
+            assert nu.name == "nu"
+            self.nu = nu
+        else:
+            self.nu = Parameter(nu, name="nu", step=1e-2)
+
+        if isinstance(rhalf, Parameter):
+            assert rhalf.name == "rhalf"
+            self.rhalf = rhalf
+        else:
+            self.rhalf = Parameter(rhalf, name="rhalf", step=1e-2)
+
+        if isinstance(g1, Parameter):
+            assert g1.name == "g1"
+            self.g1 = g1
+        else:
+            self.g1 = Parameter(g1, name="g1", step=1e-2)
+
+        if isinstance(g2, Parameter):
+            assert g2.name == "g2"
+            self.g2 = g2
+        else:
+            self.g2 = Parameter(g2, name="g2", step=1e-2)
+
+        # david = Parameter(np.array([nu, rhalf, g1, g2], dtype=np.float32), name="david", step=1e-2)
         # steps of 1% of mean amplitude, minimum set by noise_rms
-        step = partial(relative_step, factor=1e-2, minimum=np.array([1e-2, 1e-2, 1e-2, 1e-2]))
-        david = Parameter(
-            david, name="david", step=step, constraint=None,  # =PositivityConstraint(zero=1e-20)
-        )
-        parameters = (david, shift)
-
-        self.profile = profile.SpergelProfile(david, boxsize=bbox.shape[1])
-
-        super().__init__(frame, *parameters, bbox=bbox)
+        # step = partial(relative_step, factor=1e-2, minimum=np.array([1e-2, 1e-2, 1e-2, 1e-2]))
+        # david = Parameter(
+        #     david, name="david", step=step, constraint=None,  # =PositivityConstraint(zero=1e-20)
+        # )
+        # parameters = (nu, rhalf, g1, g2, shift)
+        super().__init__(frame, self.nu, self.rhalf,
+                         self.g1, self.g2, self.shift, bbox=bbox)
 
     def center(self):
         if self.shift is not None:
@@ -517,14 +537,9 @@ class SpergelMorphology(Morphology):
             return self.pixel_center
 
     def get_model(self, *parameters):
-        david = self.get_parameter(0, *parameters)  # Spergel parameters
-        shift = self.get_parameter(1, *parameters)
-        return self.profile.get_model(offset=shift)
-
-        # nu, rhalf, g1, g2 = david
-        # In galsim, rhalf is always in arcsec. We need to convert to pixels
-        # gal = galsim.Spergel(nu._value, rhalf._value).shear(g1=g1._value, g2=g2._value)
-        # return gal.drawImage(method='fft', scale=1.0,
-        #                      nx=self.bbox.shape[2],
-        #                      ny=self.bbox.shape[1],
-        #                      offset=shift._value).array
+        nu = self.get_parameter(0, *parameters)  # Spergel parameters
+        rhalf = self.get_parameter(1, *parameters)
+        g1 = self.get_parameter(2, *parameters)
+        g2 = self.get_parameter(3, *parameters)
+        shift = self.get_parameter(4, *parameters)
+        return profile.SpergelProfile(boxsize=self.bbox.shape[1]).get_model(nu, rhalf, g1, g2, offset=shift)

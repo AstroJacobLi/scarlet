@@ -181,7 +181,7 @@ def g1g2(model):
     g1 = (m20 - m02) / (m20 + m02 + 2 * np.sqrt(m20 * m02 - m11**2))
     g2 = (2 * m11) / (m20 + m02 + 2 * np.sqrt(m20 * m02 - m11**2))
 
-    return (g1[0], g2[0])
+    return (g1, g2)
 
 
 def q_pa(model):

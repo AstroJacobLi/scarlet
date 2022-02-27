@@ -1,11 +1,12 @@
 import autograd.numpy as np
 import autograd.scipy as scipy
+from autograd.numpy.numpy_boxes import ArrayBox
 from .bbox import Box
 from .model import Model, abstractmethod
 from .parameter import Parameter
 from .fft import Fourier, shift
 from scipy.special import kv, gamma
-from scipy.interpolate import interp1d
+from scipy.interpolate import interp1d, UnivariateSpline
 from scipy.optimize import fsolve
 
 
@@ -42,6 +43,7 @@ class Profile(Model):
         if isinstance(X, Parameter):
             assert X.name == name
         else:
+            print(X)
             if np.isscalar(X):
                 X = (X,)
             X = Parameter(np.array(X, dtype="float"), name=name, fixed=False)
@@ -162,32 +164,41 @@ class SpergelProfile(FunctionProfile):
     _minimum_nu = -0.85
     _maximum_nu = 4.0
 
-    def __init__(self, david, integrate=True, boxsize=None):
+    def __init__(self, nu, rhalf, g1, g2, integrate=False, boxsize=None):
+        # def __init__(self, integrate=False, boxsize=None):
         # David is the Spergel parameters: nu, rhalf, g1, g2.
-        david = self.prepare_param(david, "david")
+        nu = self.prepare_param(nu, "nu")
+        rhalf = self.prepare_param(rhalf, "rhalf")
+        g1 = self.prepare_param(g1, "g1")
+        g2 = self.prepare_param(g2, "g2")
 
-        if david[0] < SpergelProfile._minimum_nu:
-            raise ValueError("Requested Spergel index is too small, should be in range [{}, {}]".format(
-                SpergelProfile._minimum_nu, SpergelProfile._maximum_nu))
-        if david[0] > SpergelProfile._maximum_nu:
-            raise ValueError("Requested Spergel index is too large, should be in range [{}, {}]".format(
-                SpergelProfile._minimum_nu, SpergelProfile._maximum_nu))
+        assert integrate is False, "In-pixel integration not implemented (yet)!"
+
+        # if nu < SpergelProfile._minimum_nu:
+        #     raise ValueError("Requested Spergel index is too small, should be in range [{}, {}]".format(
+        #         SpergelProfile._minimum_nu, SpergelProfile._maximum_nu))
+        # if nu > SpergelProfile._maximum_nu:
+        #     raise ValueError("Requested Spergel index is too large, should be in range [{}, {}]".format(
+        #         SpergelProfile._minimum_nu, SpergelProfile._maximum_nu))
 
         if boxsize is None:
-            boxsize = int(np.ceil(10 * np.max(david[1])))
+            raise ValueError("Boxsize must be specified!")
+            # boxsize = int(np.ceil(10 * np.max(rhalf)))
 
         # Calculate the coeff c_nu in Spergel profile.
         self._calc_cnu()
-
-        super().__init__(david, integrate=integrate, boxsize=boxsize)
+        super().__init__(nu, rhalf, g1, g2, integrate=integrate, boxsize=boxsize)
+        # super().__init__(, integrate=integrate, boxsize=boxsize)
 
     def get_model(self, *parameter, offset=None):
         """
         Get the Spergel profile realization.
         Written based on astropy.modeling.models.Sersic2D.
         """
-        david = self.get_parameter(0, *parameter)
-        nu, rhalf, g1, g2 = david
+        nu = self.get_parameter(0, *parameter)[0]
+        rhalf = self.get_parameter(1, *parameter)[0]
+        g1 = self.get_parameter(2, *parameter)[0]
+        g2 = self.get_parameter(3, *parameter)[0]
 
         if offset is None:
             offset = (0.01, 0.01)  # avoid singularity at origin
@@ -198,7 +209,11 @@ class SpergelProfile(FunctionProfile):
             np.array([[1 + g1, g2],
                       [g2, 1 - g1]]) / np.sqrt(1 - g**2))
 
-        x, y = np.meshgrid(self._X - offset[0], self._Y - offset[1])
+        x = self._X[None, :] + np.zeros_like(self._X)[:, None] - offset[0]
+        y = self._Y[:, None] + np.zeros_like(self._Y)[None, :] - offset[1]
+        # x, y = np.broadcast_arrays(self._X[None, :] - offset[0],
+        #                            self._Y[:, None] - offset[1])
+        # x, y = np.meshgrid(self._X - offset[0], self._Y - offset[1])
         x_ = shear_matrix[0, 0] * x + shear_matrix[0, 1] * y
         y_ = shear_matrix[1, 0] * x + shear_matrix[1, 1] * y
         z = np.sqrt((x_ / rhalf) ** 2 + (y_ / rhalf) ** 2)
@@ -207,6 +222,38 @@ class SpergelProfile(FunctionProfile):
         model = self.expand_dims(self._f_nu(cnu * z, nu))
         # model = np.nan_to_num(model, nan=0, posinf=0, neginf=0)
         return normalize(model)
+
+    # def get_model(self, *parameter, offset=None):
+    #     """
+    #     Get the Spergel profile realization.
+    #     Written based on astropy.modeling.models.Sersic2D.
+    #     """
+    #     david = self.get_parameter(0, *parameter)
+    #     # nu, rhalf, g1, g2 = david
+
+    #     if offset is None:
+    #         offset = (0.01, 0.01)  # avoid singularity at origin
+
+    #     print(david[0])
+    #     cnu = self._cnu(david[0])
+    #     print(cnu)
+
+    #     g = np.sqrt(david[2]**2 + david[3]**2)
+    #     shear_matrix = np.linalg.inv(
+    #         np.array([[1 + david[2], david[3]],
+    #                   [david[3], 1 - david[2]]]) / np.sqrt(1 - g**2))
+
+    #     x, y = np.broadcast_arrays(self._X[None, :] - offset[0],
+    #                                self._Y[:, None] - offset[1])
+    #     # x, y = np.meshgrid(self._X - offset[0], self._Y - offset[1])
+    #     x_ = shear_matrix[0, 0] * x + shear_matrix[0, 1] * y
+    #     y_ = shear_matrix[1, 0] * x + shear_matrix[1, 1] * y
+    #     z = np.sqrt((x_ / david[1]) ** 2 + (y_ / david[1]) ** 2)
+
+    #     # amplitude = 1
+    #     model = self.expand_dims(self._f_nu(cnu * z, david[0]))
+    #     # model = np.nan_to_num(model, nan=0, posinf=0, neginf=0)
+    #     return normalize(model)
 
     def _f_nu(self, x, nu):
         """
@@ -229,5 +276,6 @@ class SpergelProfile(FunctionProfile):
             return (1 + nu) * self._f_nu(x, nu + 1) - 0.25
 
         _cnu = [fsolve(lambda x: func(x, v), x0=0.2)[0] for v in _nu]
-        self._cnu = interp1d(_nu, _cnu)
+        z = np.polyfit(_nu, _cnu, 4)  # fit a 4th order polynomial
+        self._cnu = lambda x: z[0] * x**4 + z[1] * x**3 + z[2] * x**2 + z[3] * x + z[4]
         return

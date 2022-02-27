@@ -814,8 +814,8 @@ class SpergelSource(FactorizedComponent):
             boxsize=boxsize,
         )
         g1, g2 = g1g2(morph)
-        rhalf = flux_radius(morph, 0.45)[0]
-        nu = 0.5
+        rhalf = flux_radius(morph, 0.45)
+        nu = np.array([0.5])
 
         # Construct the Spergel morphology
         center = model_frame.get_pixel(sky_coord)
