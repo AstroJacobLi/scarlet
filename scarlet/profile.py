@@ -23,25 +23,27 @@ def normalize(image):
 
 class Profile(Model):
     @abstractmethod
-    def get_model(self, *parameter, offset=None):
+    def get_model(self, *parameter, shift=None):
         """Get the Profile realization
 
         Parameters
         ----------
         parameters: tuple of optimimzation parameters
-        offset: 2D tuple or ``~scarlet.Parameter`
+        shift: 2D tuple or ``~scarlet.Parameter`
             Optional subpixel offset of the model, in units of frame pixels
 
         Returns
         -------
         result: array
-            A centered Profile model defined by its parameters, shifted by `offset`
+            A centered Profile model defined by its parameters, shifted by `shift`
         """
         pass
 
     def prepare_param(self, X, name):
         if isinstance(X, Parameter):
             assert X.name == name
+        elif isinstance(X, ArrayBox):
+            return X
         else:
             print(X)
             if np.isscalar(X):
@@ -190,30 +192,28 @@ class SpergelProfile(FunctionProfile):
         super().__init__(nu, rhalf, g1, g2, integrate=integrate, boxsize=boxsize)
         # super().__init__(, integrate=integrate, boxsize=boxsize)
 
-    def get_model(self, *parameter, offset=None):
+    def get_model(self, *parameter, shift=None):
         """
         Get the Spergel profile realization.
         Written based on astropy.modeling.models.Sersic2D.
         """
-        nu = self.get_parameter(0, *parameter)[0]
-        rhalf = self.get_parameter(1, *parameter)[0]
-        g1 = self.get_parameter(2, *parameter)[0]
-        g2 = self.get_parameter(3, *parameter)[0]
+        nu = self.get_parameter(0, *parameter)
+        rhalf = self.get_parameter(1, *parameter)
+        g1 = self.get_parameter(2, *parameter)
+        g2 = self.get_parameter(3, *parameter)
 
-        if offset is None:
-            offset = (0.01, 0.01)  # avoid singularity at origin
+        if shift is None:
+            shift = (0.01, 0.01)  # avoid singularity at origin
 
         cnu = self._cnu(nu)
         g = np.sqrt(g1**2 + g2**2)
-        shear_matrix = np.linalg.inv(
-            np.array([[1 + g1, g2],
-                      [g2, 1 - g1]]) / np.sqrt(1 - g**2))
+        shear_matrix = np.array([[1 + g1, g2],
+                                 [g2, 1 - g1]]) / np.sqrt(1 - g**2)
+        shear_matrix = shear_matrix.reshape(2, 2)
 
-        x = self._X[None, :] + np.zeros_like(self._X)[:, None] - offset[0]
-        y = self._Y[:, None] + np.zeros_like(self._Y)[None, :] - offset[1]
-        # x, y = np.broadcast_arrays(self._X[None, :] - offset[0],
-        #                            self._Y[:, None] - offset[1])
-        # x, y = np.meshgrid(self._X - offset[0], self._Y - offset[1])
+        x = self._X[None, :] + np.zeros_like(self._X)[:, None] - shift[0]
+        y = self._Y[:, None] + np.zeros_like(self._Y)[None, :] - shift[1]
+
         x_ = shear_matrix[0, 0] * x + shear_matrix[0, 1] * y
         y_ = shear_matrix[1, 0] * x + shear_matrix[1, 1] * y
         z = np.sqrt((x_ / rhalf) ** 2 + (y_ / rhalf) ** 2)
@@ -221,39 +221,7 @@ class SpergelProfile(FunctionProfile):
         # amplitude = 1
         model = self.expand_dims(self._f_nu(cnu * z, nu))
         # model = np.nan_to_num(model, nan=0, posinf=0, neginf=0)
-        return normalize(model)
-
-    # def get_model(self, *parameter, offset=None):
-    #     """
-    #     Get the Spergel profile realization.
-    #     Written based on astropy.modeling.models.Sersic2D.
-    #     """
-    #     david = self.get_parameter(0, *parameter)
-    #     # nu, rhalf, g1, g2 = david
-
-    #     if offset is None:
-    #         offset = (0.01, 0.01)  # avoid singularity at origin
-
-    #     print(david[0])
-    #     cnu = self._cnu(david[0])
-    #     print(cnu)
-
-    #     g = np.sqrt(david[2]**2 + david[3]**2)
-    #     shear_matrix = np.linalg.inv(
-    #         np.array([[1 + david[2], david[3]],
-    #                   [david[3], 1 - david[2]]]) / np.sqrt(1 - g**2))
-
-    #     x, y = np.broadcast_arrays(self._X[None, :] - offset[0],
-    #                                self._Y[:, None] - offset[1])
-    #     # x, y = np.meshgrid(self._X - offset[0], self._Y - offset[1])
-    #     x_ = shear_matrix[0, 0] * x + shear_matrix[0, 1] * y
-    #     y_ = shear_matrix[1, 0] * x + shear_matrix[1, 1] * y
-    #     z = np.sqrt((x_ / david[1]) ** 2 + (y_ / david[1]) ** 2)
-
-    #     # amplitude = 1
-    #     model = self.expand_dims(self._f_nu(cnu * z, david[0]))
-    #     # model = np.nan_to_num(model, nan=0, posinf=0, neginf=0)
-    #     return normalize(model)
+        return model  # normalize(model)
 
     def _f_nu(self, x, nu):
         """

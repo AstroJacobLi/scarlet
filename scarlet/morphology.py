@@ -527,8 +527,8 @@ class SpergelMorphology(Morphology):
         #     david, name="david", step=step, constraint=None,  # =PositivityConstraint(zero=1e-20)
         # )
         # parameters = (nu, rhalf, g1, g2, shift)
-        super().__init__(frame, self.nu, self.rhalf,
-                         self.g1, self.g2, self.shift, bbox=bbox)
+        self._f = profile.SpergelProfile(boxsize=bbox.shape[1])
+        super().__init__(frame, self.nu, self.rhalf, self.g1, self.g2, self.shift, bbox=bbox)
 
     def center(self):
         if self.shift is not None:
@@ -536,10 +536,14 @@ class SpergelMorphology(Morphology):
         else:
             return self.pixel_center
 
-    def get_model(self, *parameters):
-        nu = self.get_parameter(0, *parameters)  # Spergel parameters
-        rhalf = self.get_parameter(1, *parameters)
-        g1 = self.get_parameter(2, *parameters)
-        g2 = self.get_parameter(3, *parameters)
-        shift = self.get_parameter(4, *parameters)
-        return profile.SpergelProfile(boxsize=self.bbox.shape[1]).get_model(nu, rhalf, g1, g2, offset=shift)
+    def get_model(self, *parameters, shift=None):
+        if shift is None:
+            shift = self.shift
+
+        return self._f.get_model(*parameters, shift=shift)
+        # nu = self.get_parameter(0, *parameters)  # Spergel parameters
+        # rhalf = self.get_parameter(1, *parameters)
+        # g1 = self.get_parameter(2, *parameters)
+        # g2 = self.get_parameter(3, *parameters)
+        # shift = self.get_parameter(4, *parameters)
+        return profile.SpergelProfile(boxsize=self.bbox.shape[1]).get_model(*parameters)
