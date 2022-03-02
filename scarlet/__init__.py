@@ -20,6 +20,8 @@ from .morphology import (
     PointSourceMorphology,
     StarletMorphology,
     ExtendedSourceMorphology,
+    GaussianMorphology,
+    SpergelMorphology,
 )
 from .observation import Observation
 from .parameter import Parameter
@@ -36,6 +38,8 @@ from .source import (
     MultiExtendedSource,
     ExtendedSource,
     StarletSource,
+    GaussianSource,
+    SpergelSource,
 )
 from .spectrum import Spectrum, TabulatedSpectrum
 from .wavelet import Starlet
