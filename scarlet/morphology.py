@@ -1,3 +1,7 @@
+from autograd.extend import primitive, defvjp, defjvp
+import scipy.special
+from scipy.optimize import fsolve
+from autograd.scipy.special import gamma
 import autograd.numpy as np
 import numpy.ma as ma
 import proxmin.operators
@@ -329,12 +333,8 @@ class GaussianMorphology(ProfileMorphology):
 
 
 # we need gamma and kv from scipy.special
-from autograd.scipy.special import gamma
-from scipy.optimize import fsolve
 
 # but kv is not ported to autograd ...
-import scipy.special
-from autograd.extend import primitive, defvjp, defjvp
 
 kv = primitive(scipy.special.kv)
 defvjp(kv, None, lambda ans, n, x: lambda g: g * (-kv(n - 1, x) - kv(n + 1, x)) / 2.0)
@@ -383,9 +383,12 @@ class SpergelMorphology(ProfileMorphology):
         ellipticity = prepare_param(ellipticity, name="ellipticity")
         parameters = (self.center, nu, radius, ellipticity)
 
-        if boxsize is None:
-            boxsize = int(np.ceil(10 * rhalf))
+        g = np.sqrt(ellipticity[0]**2 + ellipticity[1]**2)
 
+        if boxsize is None:
+            boxsize = int(np.ceil(10 * rhalf / np.sqrt((1-g) / (1+g))))
+        if boxsize > frame.bbox.shape[-1]:
+            boxsize = frame.bbox.shape[-1]
         # compute the cnu function
         # see Table 1 in Spergel (2010) and the sentence below Eqn (8).
         # _nu = np.linspace(self._minimum_nu,
@@ -657,103 +660,3 @@ class ExtendedSourceMorphology(ImageMorphology):
             return self.pixel_center + self.shift
         else:
             return self.pixel_center
-
-
-class SpergelMorphology(Morphology):
-    """Morphology from a Spergel profile.
-
-    Start with a round Spergel profile.
-    We don't care about flux because it is taken into account by SED.
-
-    Parameters
-    ----------
-    frame: `~scarlet.Frame`
-        Characterization of the model
-    center: array or `~scarlet.Parameter`
-        2D center parameter (in units of frame pixels)
-    """
-
-    def __init__(self,
-                 frame,
-                 center,
-                 nu,
-                 rhalf,
-                 g1,
-                 g2,
-                 bbox=None,
-                 shifting=False):
-        """
-        Spergel Morphology
-
-        Parameters
-        ----------
-        nu, rhalf, g1, g2 are initial guesses for the Spergel parameters.
-        """
-
-        # Center of the Spergel profile
-        self.pixel_center = np.round(center).astype("int")
-
-        # define bbox
-        if bbox is None:
-            bbox = frame.bbox  # default to full frame
-        else:
-            assert len(bbox.shape) == len(frame.bbox.shape)
-
-        # parameters is simply 2D center (i.e., the shift from pixel_center)
-        if shifting:
-            self.shift = Parameter(center - self.pixel_center, name="shift", step=1e-2)
-        else:
-            self.shift = Parameter(np.zeros(2) + 0.01, name="shift", step=1e-2, fixed=True)
-
-        # Spergel parameters
-        if isinstance(nu, Parameter):
-            assert nu.name == "nu"
-            self.nu = nu
-        else:
-            self.nu = Parameter(nu, name="nu", step=1e-2)
-
-        if isinstance(rhalf, Parameter):
-            assert rhalf.name == "rhalf"
-            self.rhalf = rhalf
-        else:
-            self.rhalf = Parameter(rhalf, name="rhalf", step=1e-2)
-
-        if isinstance(g1, Parameter):
-            assert g1.name == "g1"
-            self.g1 = g1
-        else:
-            self.g1 = Parameter(g1, name="g1", step=1e-2)
-
-        if isinstance(g2, Parameter):
-            assert g2.name == "g2"
-            self.g2 = g2
-        else:
-            self.g2 = Parameter(g2, name="g2", step=1e-2)
-
-        # david = Parameter(np.array([nu, rhalf, g1, g2], dtype=np.float32), name="david", step=1e-2)
-        # steps of 1% of mean amplitude, minimum set by noise_rms
-        # step = partial(relative_step, factor=1e-2, minimum=np.array([1e-2, 1e-2, 1e-2, 1e-2]))
-        # david = Parameter(
-        #     david, name="david", step=step, constraint=None,  # =PositivityConstraint(zero=1e-20)
-        # )
-        # parameters = (nu, rhalf, g1, g2, shift)
-        self._f = profile.SpergelProfile(boxsize=bbox.shape[1])
-        super().__init__(frame, self.nu, self.rhalf, self.g1, self.g2, self.shift, bbox=bbox)
-
-    def center(self):
-        if self.shift is not None:
-            return self.pixel_center + self.shift
-        else:
-            return self.pixel_center
-
-    def get_model(self, *parameters, shift=None):
-        if shift is None:
-            shift = self.shift
-
-        return self._f.get_model(*parameters, shift=shift)
-        # nu = self.get_parameter(0, *parameters)  # Spergel parameters
-        # rhalf = self.get_parameter(1, *parameters)
-        # g1 = self.get_parameter(2, *parameters)
-        # g2 = self.get_parameter(3, *parameters)
-        # shift = self.get_parameter(4, *parameters)
-        return profile.SpergelProfile(boxsize=self.bbox.shape[1]).get_model(*parameters)

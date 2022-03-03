@@ -10,9 +10,7 @@ class UpdateException(Exception):
 
 class Model(ABC):
     """Model base class.
-
     This class stores and provides access to parameters and sub-ordinate models.
-
     Parameters
     ----------
     parameters: list of `~scarlet.Parameter`
@@ -70,14 +68,12 @@ class Model(ABC):
 
     def get_parameter(self, i, *parameters):
         """Access parameters by list index or by name
-
         Parameters
         ----------
         i: int, slice, str
             Index, slice or name attribute of the requested parameter
         parameters: tuple
             Parameters used during optimization. If not set, uses `self`
-
         Returns
         -------
         Matching item or tuple of matching items
@@ -97,8 +93,8 @@ class Model(ABC):
                 p
                 for p in parameters_
                 if (
-                    (isinstance(p, Parameter) and p.name == i)
-                    or (isinstance(p, ArrayBox) and p._value.name == i)
+                    (isinstance(p, Parameter) and p.name == i) or
+                    (isinstance(p, ArrayBox) and p._value.name == i)
                 )
             )
             if len(match) == 0:
@@ -112,11 +108,9 @@ class Model(ABC):
     @abstractmethod
     def get_model(self, *parameters, **kwargs):
         """Get the model realization
-
         Parameters
         ----------
         parameters: tuple of optimimzation parameters
-
         Returns
         -------
         model: array
@@ -126,11 +120,9 @@ class Model(ABC):
 
     def get_models_of_children(self, *parameters, **kwargs):
         """Get realization of all child models
-
         Parameters
         ----------
         parameters: tuple of optimimzation parameters
-
         Returns
         -------
         model: list
@@ -143,7 +135,7 @@ class Model(ABC):
             i = len(self._parameters)
             for c in self._children:
                 j = len(c.parameters)
-                models.append(c.get_model(*(parameters[i : i + j]), **kwargs))
+                models.append(c.get_model(*(parameters[i: i + j]), **kwargs))
                 i += j
         else:
             for c in self._children:
@@ -152,7 +144,6 @@ class Model(ABC):
 
     def check_parameters(self):
         """Check that all parameters have finite elements
-
         Raises
         ------
         `ArithmeticError` when non-finite elements are present
@@ -166,10 +157,8 @@ class Model(ABC):
 
     def update(self):
         """Update internal state or configuration of the model
-
         The method is only needed to adjust setting or parameters outside of the
         optimization forward path.
-
         Raises
         ------
         `scarlet.model.UpdateException` if the optimization needs to be interrupted

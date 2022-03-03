@@ -10,7 +10,6 @@ from .constraint import CenterOnConstraint, PositivityConstraint
 from .morphology import (
     ImageMorphology,
     PointSourceMorphology,
-    SpergelMorphology,
     StarletMorphology,
     ExtendedSourceMorphology,
     GaussianMorphology,
@@ -158,7 +157,7 @@ class ConstSkySource(FactorizedComponent):
         if observations is None:
             spectrum = np.random.rand(C)
         else:
-            spectrum = init.get_best_fit_spectrum(image_large[None], observations.data) * 1e-20
+            spectrum = init.get_best_fit_spectrum(image_large[None], observations.data) * 1e-5
         # default is step=1e-2, using larger steps here becaus SED is probably uncertain
         spectrum = Parameter(
             spectrum,
@@ -266,7 +265,7 @@ class SpergelSource(FactorizedComponent):
     Their SEDs are initialized from `observations` at the center pixel.
     """
 
-    def __init__(self, model_frame, sky_coord, nu, rhalf, ellipticity, observations):
+    def __init__(self, model_frame, sky_coord, nu, rhalf, ellipticity, observations, SED=None):
         """Spergel (2010) profile source intialized with a single pixel SED
 
         Parameters
@@ -298,10 +297,14 @@ class SpergelSource(FactorizedComponent):
         morphology = SpergelMorphology(
             model_frame, center, nu, rhalf, ellipticity=ellipticity
         )
+        flux = float(morphology.get_model().sum())
 
         # get spectrum from peak pixel, correct for PSF
-        spectra = init.get_pixel_spectrum(sky_coord, observations, correct_psf=True)
-        spectrum = np.concatenate(spectra, axis=0)
+        if SED is not None:
+            spectrum = SED / flux
+        else:
+            spectra = init.get_pixel_spectrum(sky_coord, observations, correct_psf=True) / flux
+            spectrum = np.concatenate(spectra, axis=0)
         noise_rms = np.concatenate(
             [np.array(np.mean(obs.noise_rms, axis=(1, 2))) for obs in observations]
         ).reshape(-1)
@@ -870,180 +873,6 @@ class MultiExtendedSource(CombinedComponent):
         # avoid using the same box for multiple components
         boxes = tuple(bbox.copy() for k in range(K))
         return morphs, boxes
-
-
-class SpergelSource(FactorizedComponent):
-    """Spergel source.
-
-    Source with a Spergel profile modeled as `galsim.Spergel`, centered at `sky_coord`.
-    Their SEDs are taken from `observations` at the center pixel.
-    """
-
-    def __init__(self, model_frame, sky_coord, observations,
-                 star_mask=None, satu_mask=None,
-                 thresh=1.0, min_grad=0,
-                 boxsize=None, shifting=False):
-        """Source intialized with a single pixel
-
-        Parameters
-        ----------
-        model_frame: `~scarlet.Frame`
-            The frame of the model
-        sky_coord: tuple
-            Center of the source
-        observations: instance or list of `~scarlet.Observation`
-            Observation(s) to initialize this source
-        """
-        import copy
-        from .measure import g1g2, flux_radius
-        if not hasattr(observations, "__iter__"):
-            observations = (observations,)
-
-        # get spectrum from peak pixel, correct for PSF
-        spectra = init.get_pixel_spectrum(sky_coord, observations, correct_psf=True)
-        # initialize morphology
-        # compute optimal SNR coadd for detection
-        image, std = init.build_initialization_image(observations, spectra=spectra)
-
-        ########################
-        # Take the image in, measure e1, e2, and rhalf, then initialize Spergel
-        ########################
-        # This step we get initial values for the Spergel parameters, based on the ExtendedSource
-        morph, bbox = self.init_morph(
-            model_frame,
-            sky_coord,
-            image,
-            std,
-            thresh=thresh,
-            min_grad=min_grad,
-            boxsize=boxsize,
-        )
-        g1, g2 = g1g2(morph)
-        rhalf = flux_radius(morph, 0.45)
-        nu = np.array([0.5])
-
-        # Construct the Spergel morphology
-        center = model_frame.get_pixel(sky_coord)
-        morphology = SpergelMorphology(
-            model_frame,
-            center,
-            nu, rhalf, g1, g2,
-            bbox=bbox,
-            shifting=shifting,
-        )
-
-        # find best-fit spectra for morph from init coadd
-        # assumes img only has that source in region of the box
-        detect_all, std_all = copy.deepcopy(init.build_initialization_image(observations))
-        box_3D = bbox
-        boxed_detect = box_3D.extract_from(detect_all)
-        morph_masked2 = copy.copy(morph)
-
-        if satu_mask is not None or star_mask is not None:
-            if satu_mask is not None and star_mask is not None:
-                boxed_mask = box_3D.extract_from((satu_mask + star_mask).astype(bool))
-            elif satu_mask is not None:
-                boxed_mask = box_3D.extract_from(satu_mask.astype(bool))
-            elif star_mask is not None:
-                boxed_mask = boxed_mask  # use the boxed_mask in above
-
-            boxed_mask = np.sum(boxed_mask, axis=0).astype(bool)
-            for img in boxed_detect:
-                img[boxed_mask.astype(bool)] = 0
-            morph_masked2[boxed_mask.astype(bool)] = 0
-
-        # Sometimes (especially for images with coadd issues, i.e., large "interpolation" pixels in HSC mask),
-        # the spectrum will be NaN after masking "saturation" and "interpolation" pixels.
-        # If this happens, we don't use mask anymore when estimating the spectrum.
-        spectrum = init.get_best_fit_spectrum((morph_masked2,), boxed_detect)
-        if np.sum(np.isnan(spectrum)) > 0:
-            spectrum = init.get_best_fit_spectrum((morph,), boxed_detect)
-
-        noise_rms = np.concatenate(
-            [np.array(np.mean(obs.noise_rms, axis=(1, 2))) for obs in observations]
-        ).reshape(-1)
-        spectrum = TabulatedSpectrum(model_frame, spectrum, min_step=noise_rms)
-
-        # set up model with its parameters
-        super().__init__(model_frame, spectrum, morphology)
-
-        # retain center as attribute
-        self.center = morphology.center
-
-    @staticmethod
-    def init_morph(
-        frame,
-        sky_coord,
-        detect,
-        detect_std,
-        thresh=1,
-        min_grad=0,
-        boxsize=None,
-    ):
-        """
-        Make the initial morphology matrix, measure the Spergel 
-        parameters based on that morphology as the input for SpergelMorphology.
-
-        See `ExtendedSource` for a description of the parameters
-
-        Returns
-        -------
-        morph, bbox
-        """
-        symmetric = True
-        monotonic = True
-
-        # position in frame coordinates
-        center = frame.get_pixel(sky_coord)
-        center_index = np.round(center).astype("int")
-
-        # Copy detect if reused for other sources
-        im = detect.copy()
-
-        # Apply the necessary constraints
-        if symmetric:
-            im = operator.prox_uncentered_symmetry(
-                im,
-                0,
-                center=center_index,
-                algorithm="sdss",  # *1 is to artificially pass a variable that is not coadd
-            )
-        if monotonic:
-            if monotonic is True:
-                monotonic = "flat"  # "angle"
-            # use finite thresh to remove flat bridges
-            prox_monotonic = operator.prox_weighted_monotonic(
-                im.shape,
-                neighbor_weight=monotonic,
-                center=center_index,
-                min_gradient=min_grad,
-            )
-            im = prox_monotonic(im, 0).reshape(im.shape)
-
-        # truncate morph at thresh * bg_rms
-        threshold = detect_std * thresh
-        morph, bbox = init.trim_morphology(
-            center_index, im, bg_thresh=threshold, boxsize=boxsize
-        )
-        bbox = Box((frame.C,)) @ bbox
-        # normalize to unity at peak pixel for the imposed normalization
-        if morph.sum() > 0:
-            morph /= morph.sum()
-        else:
-            msg = f"No flux in morphology model for source at {sky_coord}"
-            logger.warning(msg)
-            morph = CenterOnConstraint(tiny=1)(morph, 0)
-
-        # for very noise inits, there is only 1 or few pixels in the center:
-        # pad morph with the shape of the PSF
-        # if frame.psf is not None:
-        #     psf_morph, _ = CompactExtendedSource.init_morph(
-        #         frame, sky_coord, boxsize=max(bbox.shape)
-        #     )
-        #     morph = np.maximum(morph, psf_morph)
-        #     morph /= morph.sum()
-
-        return morph, bbox
 
 
 def append_docs_from(other_func):
