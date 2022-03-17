@@ -26,8 +26,6 @@ from .psf import PSF
 from .wavelet import Starlet, starlet_reconstruction, get_multiresolution_support
 from . import fft
 from . import initialization
-from . import profile
-import galsim
 
 
 class Morphology(Model):
@@ -386,7 +384,7 @@ class SpergelMorphology(ProfileMorphology):
         g = np.sqrt(ellipticity[0]**2 + ellipticity[1]**2)
 
         if boxsize is None:
-            boxsize = int(np.ceil(10 * rhalf / np.sqrt((1-g) / (1+g))))
+            boxsize = int(np.ceil(10 * rhalf))  # / np.sqrt((1-g) / (1+g))
         if boxsize > frame.bbox.shape[-1]:
             boxsize = frame.bbox.shape[-1]
         # compute the cnu function
