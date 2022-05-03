@@ -122,11 +122,11 @@ class ConstWholeSkySource(FactorizedComponent):
         spectrum = Parameter(
             spectrum,
             name="spectrum",
-            step=partial(relative_step, factor=1e-1),
-            constraint=PositivityConstraint(),
+            step=partial(relative_step, factor=1e-2),
+            # constraint=PositivityConstraint(), # sky doesn't need to be positive
         )
         spectrum = TabulatedSpectrum(model_frame, spectrum)
-        self.center = (Ny//2, Nx//2)
+        self.center = (Ny // 2, Nx // 2)
         super().__init__(model_frame, spectrum, morphology)
 
 
@@ -166,7 +166,7 @@ class ConstSkySource(FactorizedComponent):
             constraint=PositivityConstraint(),
         )
         spectrum = TabulatedSpectrum(model_frame, spectrum)
-        self.center = (Ny//2, Nx//2)
+        self.center = (Ny // 2, Nx // 2)
         super().__init__(model_frame, spectrum, morphology)
 
 
