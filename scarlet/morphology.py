@@ -423,7 +423,8 @@ class SpergelMorphology(ProfileMorphology):
         if boxsize is None:
             boxsize = int(np.ceil(10 * rhalf))  # / np.sqrt((1-g) / (1+g))
         if boxsize > frame.bbox.shape[-1]:
-            boxsize = int(0.8 * frame.bbox.shape[-1])
+            # boxsize = int(0.8 * frame.bbox.shape[-1])
+            boxsize = int(frame.bbox.shape[-1])
         # compute the cnu function
         # see Table 1 in Spergel (2010) and the sentence below Eqn (8).
         # _nu = np.linspace(self._minimum_nu,

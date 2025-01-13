@@ -115,7 +115,7 @@ class Starlet(object):
     @property
     def scales(self):
         """Number of starlet scales"""
-        return len(self.coefficients)-1
+        return len(self.coefficients) - 1
 
     @property
     def generation(self):
@@ -147,7 +147,7 @@ class Starlet(object):
     def norm(self):
         """The norm of a convolved dirac"""
         if self._norm is None:
-            cy, cx = np.array(self.image.shape[-2:])//2
+            cy, cx = np.array(self.image.shape[-2:]) // 2
             dirac = np.zeros(self.image.shape[-2:])
             dirac[cy, cx] = 1
             seed = starlet_transform(dirac, generation=self.generation, convolve2D=self.convolve2D)
@@ -176,10 +176,10 @@ def bspline_convolve(image, scale):
     h1D = np.array([1.0 / 16, 1.0 / 4, 3.0 / 8, 1.0 / 4, 1.0 / 16])
     j = scale
 
-    slice0 = slice(None, -2**(j+1))
+    slice0 = slice(None, -2**(j + 1))
     slice1 = slice(None, -2**j)
     slice3 = slice(2**j, None)
-    slice4 = slice(2**(j+1), None)
+    slice4 = slice(2**(j + 1), None)
     # row
     col = image * h1D[2]
     col[slice4] += image[slice0] * h1D[0]
@@ -281,7 +281,7 @@ def multiband_starlet_transform(image, scales=None, generation=2, convolve2D=Non
     assert generation in (1, 2), f"generation should be 1 or 2, got {generation}"
     scales = get_scales(image.shape, scales)
 
-    wavelets = np.empty((scales+1,)+image.shape, dtype=image.dtype)
+    wavelets = np.empty((scales + 1,) + image.shape, dtype=image.dtype)
     for b, image in enumerate(image):
         wavelets[:, b] = starlet_transform(image, scales=scales, generation=generation, convolve2D=convolve2D)
     return wavelets
@@ -390,7 +390,7 @@ def get_multiresolution_support(image, starlets, sigma, K=3, epsilon=1e-1, max_i
             M = (np.abs(starlets) > K * sigma * sigma_je[:, None, None])
             S = np.sum(M, axis=0) == 0
             sigma_i = np.std(noise * S)
-            if np.abs(sigma_i-last_sigma_i)/sigma_i < epsilon:
+            if np.abs(sigma_i - last_sigma_i) / sigma_i < epsilon:
                 break
             last_sigma_i = sigma_i
     else:
